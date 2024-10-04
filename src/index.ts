@@ -3,6 +3,7 @@
  *
  * Miscellaneous utility functions for TypeDoc plugins.
  *
+ * @document ../CHANGELOG.md
  * @document ../LICENSE
  */
 
