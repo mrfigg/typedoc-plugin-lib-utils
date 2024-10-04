@@ -156,7 +156,12 @@ export async function readSearch(app: Application) {
 export function rebuildSearch(
   search: Search,
   app: Application,
-  event: RendererEvent
+  event: RendererEvent,
+  options?: {
+    formatName?: (name: string | undefined) => string | undefined
+    formatComment?: (comment: string | undefined) => string | undefined
+    formatDocument?: (document: string | undefined) => string | undefined
+  }
 ) {
   const searchInComments = !!app.options.getValue('searchInComments')
   const searchInDocuments = !!app.options.getValue('searchInDocuments')
@@ -274,6 +279,18 @@ export function rebuildSearch(
           row.boost = 1
         }
       }
+    }
+
+    if (options?.formatName) {
+      row.name = options.formatName(row.name)
+    }
+
+    if (options?.formatComment) {
+      row.comment = options.formatComment(row.comment)
+    }
+
+    if (options?.formatDocument) {
+      row.document = options.formatDocument(row.document)
     }
 
     builder.add(

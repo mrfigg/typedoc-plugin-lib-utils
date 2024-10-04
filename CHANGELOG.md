@@ -1,3 +1,9 @@
+# Unreleased
+
+### Features
+
+- Added options with format callbacks to `rebuildSearch`.
+
 ## v1.1.0
 
 ### Features
