@@ -1,0 +1,55 @@
+{
+  "name": "@mrfigg/typedoc-plugin-lib-utils",
+  "version": "1.0.0",
+  "description": "Miscellaneous utility functions for TypeDoc plugins",
+  "author": "MrFigg",
+  "license": "MIT",
+  "homepage": "https://github.com/mrfigg/typedoc-plugin-lib-utils#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrfigg/typedoc-plugin-lib-utils.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mrfigg/typedoc-plugin-lib-utils/issues"
+  },
+  "keywords": [
+    "typedoc",
+    "plugin",
+    "typedoc-plugin",
+    "typedocplugin",
+    "utilities",
+    "utils"
+  ],
+  "main": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rimraf dist && tsc && rimraf docs && typedoc"
+  },
+  "engines": {
+    "node": ">=18.18"
+  },
+  "peerDependencies": {
+    "typedoc": "^0.26.8"
+  },
+  "dependencies": {
+    "commondir": "^1.0.1",
+    "escalade": "^3.2.0",
+    "lunr": "^2.3.9"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.9.0",
+    "@types/commondir": "^1.0.2",
+    "@types/lunr": "^2.3.7",
+    "@types/node": "^22.7.4",
+    "eslint": "^9.9.0",
+    "globals": "^15.9.0",
+    "prettier": "3.3.3",
+    "rimraf": "^6.0.1",
+    "typedoc-plugin-replace-text": "^4.0.0",
+    "typescript": "^5.5.4",
+    "typescript-eslint": "^8.1.0"
+  }
+}

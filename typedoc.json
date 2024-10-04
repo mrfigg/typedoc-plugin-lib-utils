@@ -1,0 +1,15 @@
+{
+  "entryPoints": ["./src/index.ts"],
+  "out": "./docs",
+  "disableSources": true,
+  "plugin": ["typedoc-plugin-replace-text"],
+  "replaceText": {
+    "replacements": [
+      {
+        "pattern": "#+ API(?:(?!^#).)*",
+        "flags": "gmis",
+        "replace": ""
+      }
+    ]
+  }
+}
