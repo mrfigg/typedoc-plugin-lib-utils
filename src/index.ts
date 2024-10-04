@@ -128,18 +128,28 @@ export async function writeGzipJson(
   await writeFile(file, content)
 }
 
-export interface Search {
-  rows: {
-    url: string
-    kind?: ReflectionKind
-    name?: string
-    classes?: string
-    parent?: string
-    comment?: string
-    document?: string
-    boost?: number
-  }[]
-  index: object
+export type Search = {
+  rows: SearchItem[]
+} & Readonly<{
+  index: Readonly<object>
+}>
+
+export type SearchItem = {
+  url: string
+  kind?: ReflectionKind
+  name?: string
+  classes?: string
+  parent?: string
+  comment?: string
+  document?: string
+  boost?: number
+}
+
+export async function readSearch(app: Application) {
+  return (await readGzipJson(
+    resolve(app.options.getValue('out'), 'assets', 'search.js'),
+    'window.searchData'
+  )) as Search
 }
 
 export function rebuildSearch(
@@ -283,9 +293,45 @@ export function rebuildSearch(
     delete row.boost
   }
 
-  search.index = builder.build().toJSON()
+  // ignore read-only internally
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ;(search as any).index = builder.build().toJSON()
 
   return search
+}
+
+export async function writeSearch(app: Application, search: Search) {
+  await writeGzipJson(
+    resolve(app.options.getValue('out'), 'assets', 'search.js'),
+    search as unknown as JSONValue,
+    'window.searchData'
+  )
+}
+
+export type NavigationItem = {
+  path: string
+  text: string
+  kind: ReflectionKind
+  class?: string
+  children?: NavigationItem[]
+}
+
+export async function readNavigation(app: Application) {
+  return (await readGzipJson(
+    resolve(app.options.getValue('out'), 'assets', 'navigation.js'),
+    'window.navigationData'
+  )) as NavigationItem[]
+}
+
+export async function writeNavigation(
+  app: Application,
+  navigation: NavigationItem[]
+) {
+  await writeGzipJson(
+    resolve(app.options.getValue('out'), 'assets', 'navigation.js'),
+    navigation,
+    'window.navigationData'
+  )
 }
 
 function getCommonDir(app: Application) {
