@@ -1,6 +1,6 @@
 {
   "name": "@mrfigg/typedoc-plugin-lib-utils",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Miscellaneous utility functions for TypeDoc plugins",
   "author": "MrFigg",
   "license": "MIT",
