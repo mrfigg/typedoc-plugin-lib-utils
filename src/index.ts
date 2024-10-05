@@ -24,6 +24,7 @@ import {
   EntryPointStrategy,
   IndexEvent,
   ProjectReflection,
+  Reflection,
   ReflectionKind,
   RendererEvent,
 } from 'typedoc'
@@ -129,6 +130,7 @@ export async function writeGzipJson(
   await writeFile(file, content)
 }
 
+/** @deprecated */
 export type Search = {
   rows: SearchItem[]
 } & Readonly<{
@@ -146,6 +148,21 @@ export type SearchItem = {
   boost?: number
 }
 
+export type AlterSearchCallback = (
+  items: SearchItem[],
+  context: { app: Application; event: RendererEvent }
+) => void | Promise<void>
+
+export type FormatSearchCallback = (
+  item: SearchItem & Readonly<{ url: string }>,
+  context: {
+    app: Application
+    event: RendererEvent
+    reflection?: DeclarationReflection | DocumentReflection
+  }
+) => void | Promise<void>
+
+/** @deprecated Use {@link alterSearch} and {@link formatSearch} instead. */
 export async function readSearch(app: Application) {
   return (await readGzipJson(
     resolve(app.options.getValue('out'), 'assets', 'search.js'),
@@ -153,6 +170,7 @@ export async function readSearch(app: Application) {
   )) as Search
 }
 
+/** @deprecated Use {@link alterSearch} and {@link formatSearch} instead. */
 export function rebuildSearch(
   search: Search,
   app: Application,
@@ -327,12 +345,238 @@ export function rebuildSearch(
   return search
 }
 
+/** @deprecated Use {@link alterSearch} and {@link formatSearch} instead. */
 export async function writeSearch(app: Application, search: Search) {
   await writeGzipJson(
     resolve(app.options.getValue('out'), 'assets', 'search.js'),
     search as unknown as JSONValue,
     'window.searchData'
   )
+}
+
+const searchTasksStore = new WeakMap<
+  Application,
+  {
+    alter: AlterSearchCallback[]
+    format: FormatSearchCallback[]
+  }
+>()
+
+function getSearchTasks(app: Application) {
+  if (searchTasksStore.has(app)) {
+    return searchTasksStore.get(app)!
+  }
+
+  const searchTasks: {
+    alter: AlterSearchCallback[]
+    format: FormatSearchCallback[]
+  } = { alter: [], format: [] }
+
+  searchTasksStore.set(app, searchTasks)
+
+  app.renderer.postRenderAsyncJobs.push(async (event) => {
+    const search = (await readGzipJson(
+      resolve(app.options.getValue('out'), 'assets', 'search.js'),
+      'window.searchData'
+    )) as {
+      rows: SearchItem[]
+      index: object
+    }
+
+    for (const alter of searchTasks.alter) {
+      await alter(search.rows, { app, event })
+    }
+
+    const searchInComments = !!app.options.getValue('searchInComments')
+    const searchInDocuments = !!app.options.getValue('searchInDocuments')
+
+    const theme = app.renderer.theme! as DefaultTheme
+
+    const reflections = Object.values(event.project.reflections).filter(
+      (reflection) =>
+        (reflection instanceof DeclarationReflection ||
+          reflection instanceof DocumentReflection) &&
+        reflection.url &&
+        reflection.name &&
+        !reflection.flags.isExternal
+    ) as (DeclarationReflection | DocumentReflection)[]
+
+    const indexEvent = new IndexEvent(reflections)
+
+    app.renderer.trigger(IndexEvent.PREPARE_INDEX, indexEvent)
+
+    const builder = new Builder()
+    builder.pipeline.add(trimmer)
+
+    builder.ref('id')
+
+    for (const [key, boost] of Object.entries(indexEvent.searchFieldWeights)) {
+      builder.field(key, { boost })
+    }
+
+    for (const [id, item] of search.rows.entries()) {
+      const reflectionIndex = reflections.findIndex(
+        (reflection) => reflection.url === item.url
+      )
+
+      const reflection =
+        reflectionIndex === -1 ? undefined : reflections[reflectionIndex]
+
+      if (reflection) {
+        if (item.kind === undefined) {
+          item.kind = reflection.kind
+        }
+
+        if (item.name === undefined) {
+          item.name = reflection.name
+        }
+
+        if (item.classes === undefined) {
+          item.classes = theme.getReflectionClasses(reflection)
+        }
+
+        if (item.parent === undefined) {
+          let parent = reflection.parent
+
+          if (parent instanceof ProjectReflection) {
+            parent = undefined
+          }
+
+          if (parent) {
+            item.parent = parent.getFullName()
+          }
+        }
+
+        if (item.comment === undefined && searchInComments) {
+          const comments: Comment[] = []
+
+          if (reflection.comment) {
+            comments.push(reflection.comment)
+          }
+
+          if (reflection.isDeclaration()) {
+            for (const signature of reflection.signatures ?? []) {
+              if (!signature.comment) {
+                continue
+              }
+
+              comments.push(signature.comment)
+            }
+
+            if (reflection.getSignature?.comment) {
+              comments.push(reflection.getSignature.comment)
+            }
+
+            if (reflection.setSignature?.comment) {
+              comments.push(reflection.setSignature.comment)
+            }
+          }
+
+          if (comments.length) {
+            item.comment = comments
+              .flatMap((comment) => [
+                ...comment.summary,
+                ...comment.blockTags.flatMap((token) => token.content),
+              ])
+              .map((part) => part.text)
+              .join('\n')
+          }
+        }
+
+        if (
+          item.document === undefined &&
+          searchInDocuments &&
+          reflection.isDocument()
+        ) {
+          item.document = reflection.content
+            .flatMap((part) => part.text)
+            .join('\n')
+        }
+
+        if (item.boost === undefined) {
+          item.boost = reflection.relevanceBoost ?? 1
+        }
+      }
+
+      for (const format of searchTasks.format) {
+        await format(item, { app, event, reflection })
+      }
+
+      if (item.url && (item.boost === undefined || item.boost > 0)) {
+        builder.add(
+          {
+            name: item.name,
+            comment: item.comment,
+            document: item.document,
+            ...(reflection ? indexEvent.searchFields[reflectionIndex] : {}),
+            id,
+          },
+          {
+            boost: item.boost ?? 1,
+          }
+        )
+      }
+
+      item.name = item.name ?? ''
+      delete item.comment
+      delete item.document
+      delete item.boost
+    }
+
+    search.index = builder.build().toJSON()
+
+    await writeGzipJson(
+      resolve(app.options.getValue('out'), 'assets', 'search.js'),
+      search as JSONValue,
+      'window.searchData'
+    )
+  })
+
+  return searchTasks
+}
+
+/**
+ * @example
+ *
+ * ```ts
+ * import { Application, ReflectionKind } from 'typedoc'
+ *
+ * export function load(app: Application) {
+ *   alterSearch(app, (items) => {
+ *     items.unshift({
+ *       url: 'foo.html#bar',
+ *       name: 'Foo',
+ *       kind: ReflectionKind.Document,
+ *       comment: undefined,
+ *       document: 'Lorem ipsum dolor sit amet...'
+ *     })
+ *   })
+ * }
+ * ```
+ */
+export function alterSearch(app: Application, callback: AlterSearchCallback) {
+  getSearchTasks(app).alter.push(callback)
+}
+
+/**
+ * @example
+ *
+ * ```ts
+ * import { Application } from 'typedoc'
+ *
+ * export function load(app: Application) {
+ *   formatSearch(app, (item) => {
+ *     if (!item.document) {
+ *       return
+ *     }
+ *
+ *     item.document = item.document.replace(/foo/g, 'bar')
+ *   })
+ * }
+ * ```
+ */
+export function formatSearch(app: Application, callback: FormatSearchCallback) {
+  getSearchTasks(app).format.push(callback)
 }
 
 export type NavigationItem = {
@@ -343,6 +587,21 @@ export type NavigationItem = {
   children?: NavigationItem[]
 }
 
+export type AlterNavigationCallback = (
+  items: NavigationItem[],
+  context: { app: Application; event: RendererEvent }
+) => void | Promise<void>
+
+export type FormatNavigationCallback = (
+  item: Omit<NavigationItem, 'children'> & Readonly<{ path: string }>,
+  context: {
+    app: Application
+    event: RendererEvent
+    reflection?: Reflection
+  }
+) => void | Promise<void>
+
+/** @deprecated Use {@link alterNavigation} instead. */
 export async function readNavigation(app: Application) {
   return (await readGzipJson(
     resolve(app.options.getValue('out'), 'assets', 'navigation.js'),
@@ -350,6 +609,7 @@ export async function readNavigation(app: Application) {
   )) as NavigationItem[]
 }
 
+/** @deprecated Use {@link alterNavigation} instead. */
 export async function writeNavigation(
   app: Application,
   navigation: NavigationItem[]
@@ -359,6 +619,161 @@ export async function writeNavigation(
     navigation,
     'window.navigationData'
   )
+}
+
+const navigationTasksStore = new WeakMap<
+  Application,
+  { alter: AlterNavigationCallback[]; format: FormatNavigationCallback[] }
+>()
+
+function getNavigationTasks(app: Application) {
+  if (navigationTasksStore.has(app)) {
+    return navigationTasksStore.get(app)!
+  }
+
+  const navigationTasks: {
+    alter: AlterNavigationCallback[]
+    format: FormatNavigationCallback[]
+  } = { alter: [], format: [] }
+
+  navigationTasksStore.set(app, navigationTasks)
+
+  app.renderer.postRenderAsyncJobs.push(async (event) => {
+    const items = (await readGzipJson(
+      resolve(app.options.getValue('out'), 'assets', 'navigation.js'),
+      'window.navigationData'
+    )) as NavigationItem[]
+
+    for (const alter of navigationTasks.alter) {
+      await alter(items, { app, event })
+    }
+
+    const theme = app.renderer.theme! as DefaultTheme
+
+    const reflections = Object.values(event.project.reflections).filter(
+      (reflection) =>
+        reflection.url && reflection.name && !reflection.flags.isExternal
+    )
+
+    async function formatNavigationItems(items: NavigationItem[]) {
+      for (const item of items) {
+        const reflectionIndex = reflections.findIndex(
+          (reflection) => reflection.url === item.path
+        )
+
+        const reflection =
+          reflectionIndex === -1 ? undefined : reflections[reflectionIndex]
+
+        if (reflection) {
+          if (item.text === undefined) {
+            item.text = reflection.name
+          }
+
+          if (item.kind === undefined) {
+            item.kind = reflection.kind
+          }
+
+          if (item.class === undefined) {
+            if (
+              reflection instanceof DeclarationReflection ||
+              reflection instanceof DocumentReflection
+            ) {
+              item.class = theme.getReflectionClasses(reflection)
+            } else {
+              item.class = ''
+            }
+
+            if (reflection.isDeprecated()) {
+              if (item.class) {
+                item.class = ' ' + item.class
+              }
+
+              item.class = 'deprecated' + item.class
+            }
+          }
+        }
+
+        const dummyItem = {
+          path: item.path,
+          text: item.text,
+          kind: item.kind,
+          class: item.class,
+        }
+
+        for (const format of navigationTasks.format) {
+          await format(dummyItem, { app, event, reflection })
+        }
+
+        item.text = dummyItem.text
+        item.kind = dummyItem.kind
+        item.class = dummyItem.class
+
+        if (item.children && item.children.length) {
+          await formatNavigationItems(item.children)
+        }
+      }
+    }
+
+    await formatNavigationItems(items)
+
+    await writeGzipJson(
+      resolve(app.options.getValue('out'), 'assets', 'navigation.js'),
+      items,
+      'window.navigationData'
+    )
+  })
+
+  return navigationTasks
+}
+
+/**
+ * @example
+ *
+ * ```ts
+ * import { Application, ReflectionKind } from 'typedoc'
+ *
+ * export function load(app: Application) {
+ *   alterNavigation(app, (items) => {
+ *     items.unshift({
+ *       path: 'foo.html#bar',
+ *       text: 'Foo',
+ *       kind: ReflectionKind.Document
+ *     })
+ *   })
+ * }
+ * ```
+ */
+export function alterNavigation(
+  app: Application,
+  callback: AlterNavigationCallback
+) {
+  getNavigationTasks(app).alter.push(callback)
+}
+
+/**
+ * @example
+ *
+ * ```ts
+ * import { Application } from 'typedoc'
+ *
+ * export function load(app: Application) {
+ *   formatNavigation(app, (item) => {
+ *     if (!item.class) {
+ *       item.class = ''
+ *     } else {
+ *       item.class += ' '
+ *     }
+ *
+ *     item.class += 'foo-bar'
+ *   })
+ * }
+ * ```
+ */
+export function formatNavigation(
+  app: Application,
+  callback: FormatNavigationCallback
+) {
+  getNavigationTasks(app).format.push(callback)
 }
 
 function getCommonDir(app: Application) {
