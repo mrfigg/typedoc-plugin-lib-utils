@@ -540,6 +540,7 @@ function getSearchTasks(app: Application) {
  *
  * ```ts
  * import { Application, ReflectionKind } from 'typedoc'
+ * import { alterSearch } from '@mrfigg/typedoc-plugin-lib-utils'
  *
  * export function load(app: Application) {
  *   alterSearch(app, (items) => {
@@ -563,6 +564,7 @@ export function alterSearch(app: Application, callback: AlterSearchCallback) {
  *
  * ```ts
  * import { Application } from 'typedoc'
+ * import { formatSearch } from '@mrfigg/typedoc-plugin-lib-utils'
  *
  * export function load(app: Application) {
  *   formatSearch(app, (item) => {
@@ -731,6 +733,7 @@ function getNavigationTasks(app: Application) {
  *
  * ```ts
  * import { Application, ReflectionKind } from 'typedoc'
+ * import { alterNavigation } from '@mrfigg/typedoc-plugin-lib-utils'
  *
  * export function load(app: Application) {
  *   alterNavigation(app, (items) => {
@@ -755,6 +758,7 @@ export function alterNavigation(
  *
  * ```ts
  * import { Application } from 'typedoc'
+ * import { formatNavigation } from '@mrfigg/typedoc-plugin-lib-utils'
  *
  * export function load(app: Application) {
  *   formatNavigation(app, (item) => {
