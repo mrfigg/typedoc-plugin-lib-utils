@@ -158,9 +158,18 @@ export function rebuildSearch(
   app: Application,
   event: RendererEvent,
   options?: {
-    formatName?: (name: string | undefined) => string | undefined
-    formatComment?: (comment: string | undefined) => string | undefined
-    formatDocument?: (document: string | undefined) => string | undefined
+    formatName?: (
+      name: string | undefined,
+      reflection: DeclarationReflection | DocumentReflection | undefined
+    ) => string | undefined
+    formatComment?: (
+      comment: string | undefined,
+      reflection: DeclarationReflection | DocumentReflection | undefined
+    ) => string | undefined
+    formatDocument?: (
+      document: string | undefined,
+      reflection: DeclarationReflection | DocumentReflection | undefined
+    ) => string | undefined
   }
 ) {
   const searchInComments = !!app.options.getValue('searchInComments')
@@ -282,15 +291,15 @@ export function rebuildSearch(
     }
 
     if (options?.formatName) {
-      row.name = options.formatName(row.name)
+      row.name = options.formatName(row.name, reflection)
     }
 
     if (options?.formatComment) {
-      row.comment = options.formatComment(row.comment)
+      row.comment = options.formatComment(row.comment, reflection)
     }
 
     if (options?.formatDocument) {
-      row.document = options.formatDocument(row.document)
+      row.document = options.formatDocument(row.document, reflection)
     }
 
     builder.add(

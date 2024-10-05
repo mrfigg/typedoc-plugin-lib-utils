@@ -1,3 +1,9 @@
+# Unreleased
+
+### Features
+
+- Added reflection argument to format callbacks on `rebuildSearch` options.
+
 ## V1.2.0
 
 ### Features
