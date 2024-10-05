@@ -27,7 +27,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "build": "rimraf dist && tsc && rimraf docs && typedoc"
+    "build": "rimraf dist && tsc",
+    "docs": "rimraf docs && typedoc"
   },
   "engines": {
     "node": ">=18.18"
