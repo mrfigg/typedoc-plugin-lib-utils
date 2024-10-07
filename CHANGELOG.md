@@ -1,3 +1,9 @@
+# Unreleased
+
+### Bug Fixes
+
+- Fixed `NavigationItem.path` was set to be required when it is actually optional.
+
 ## v1.3.0
 
 ### Features

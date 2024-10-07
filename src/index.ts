@@ -582,9 +582,9 @@ export function formatSearch(app: Application, callback: FormatSearchCallback) {
 }
 
 export type NavigationItem = {
-  path: string
   text: string
   kind: ReflectionKind
+  path?: string
   class?: string
   children?: NavigationItem[]
 }
@@ -595,7 +595,7 @@ export type AlterNavigationCallback = (
 ) => void | Promise<void>
 
 export type FormatNavigationCallback = (
-  item: Omit<NavigationItem, 'children'> & Readonly<{ path: string }>,
+  item: Omit<NavigationItem, 'children'> & Readonly<{ path?: string }>,
   context: {
     app: Application
     event: RendererEvent
@@ -659,9 +659,9 @@ function getNavigationTasks(app: Application) {
 
     async function formatNavigationItems(items: NavigationItem[]) {
       for (const item of items) {
-        const reflectionIndex = reflections.findIndex(
-          (reflection) => reflection.url === item.path
-        )
+        const reflectionIndex = !item.path
+          ? -1
+          : reflections.findIndex((reflection) => reflection.url === item.path)
 
         const reflection =
           reflectionIndex === -1 ? undefined : reflections[reflectionIndex]
@@ -696,9 +696,9 @@ function getNavigationTasks(app: Application) {
         }
 
         const dummyItem = {
-          path: item.path,
           text: item.text,
           kind: item.kind,
+          path: item.path,
           class: item.class,
         }
 
